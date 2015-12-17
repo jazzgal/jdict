@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"time"
 )
 
 // Structs for parsing XML data

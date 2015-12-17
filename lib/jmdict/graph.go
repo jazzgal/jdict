@@ -1,5 +1,7 @@
 package jmdict
 
+import "time"
+
 // Graph struct
 type Node struct {
 	id   string
