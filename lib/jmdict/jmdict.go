@@ -3,9 +3,11 @@ package jmdict
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/boltdb/bolt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -78,7 +80,7 @@ type (
 // DTO struct
 type (
 	EntryCollect struct {
-		Id       int64
+		Id       int
 		Sequence int
 		// Query key - data indexes
 		Keys       map[string][]int
@@ -295,21 +297,75 @@ func makeEntryCollect(indexes map[string][]int, kanjiSet [][]Node,
 	return collect
 }
 
+// itob returns an 8-byte big endian representation of v.
+func itob(v int) []byte {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(v))
+	return b
+}
+
+func SaveEntry(e *EntryCollect, db *bolt.DB) error {
+	return db.Update(func(tx *bolt.Tx) error {
+		// Retrieve the entry bucket.
+		b := tx.Bucket([]byte("entry"))
+
+		// Generate ID for the entry.
+		id, _ := b.NextSequence()
+		e.Id = int(id)
+
+		// Marshal entry data into bytes.
+		buf, err := json.Marshal(e)
+		if err != nil {
+			return err
+		}
+
+		// Persist bytes to entries bucket.
+		return b.Put(itob(e.Id), buf)
+	})
+}
+
 // Process data before push into bucket
 func syncJMData(jmdict Jmdict) {
-	//db, err := bolt.Open("jdict.db", 0644, nil)
-	//CheckErr(err)
-	//defer db.Close()
-	//var entry JapEng
+	db, err := bolt.Open("jdict.db", 0644, nil)
+	CheckErr(err)
+	defer db.Close()
+
+	// Create buckets first
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("entry"))
+		if err != nil {
+			return err
+		}
+		_, err = tx.CreateBucketIfNotExists([]byte("index"))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	CheckErr(err)
+
 	for _, entry := range jmdict.Entries {
 		//0. Indices query key
 		//Test entry
 		if entry.EntrySequence == 1000390 {
 			fmt.Println(entry)
-			makeIndexes(entry)
+			queries, entry := makeIndexes(entry)
+			//1. Store data to 'entry' bucket
+			err = SaveEntry(&entry, db)
+			CheckErr(err)
+			//2. Update 'index' bucket
+			for _, q := range queries {
+				err := db.Update(func(tx *bolt.Tx) error {
+					bucket, err := tx.CreateBucketIfNotExists([]byte("index"))
+					if err != nil {
+						return err
+					}
+					return bucket.Put([]byte(q), itob(entry.Id))
+				})
+				CheckErr(err)
+			}
 		}
-		//1. Store data to 'entry' bucket
-		//2. Update 'index' bucket
+
 	}
 
 }
