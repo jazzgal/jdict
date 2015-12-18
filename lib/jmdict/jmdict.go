@@ -15,6 +15,11 @@ import (
 	"sort"
 )
 
+var (
+	indexBucketName = []byte("index")
+	entryBucketName = []byte("entry")
+)
+
 // Structs for parsing XML data
 type (
 	Jmdict struct {
@@ -104,6 +109,19 @@ type (
 	Sense struct {
 		Gloss []string
 		Meta  map[string][]string `json:",omitempty"`
+	}
+)
+
+// Search result classes
+type (
+	QueryResult struct {
+		Key   string
+		Entry EntryResult
+	}
+	EntryResult struct {
+		Kanji   []Keb
+		Reading []Reb
+		Meaning []Sense
 	}
 )
 
@@ -378,4 +396,73 @@ func PopulateData(filePath string) {
 	fmt.Println("Push data to database ...")
 	syncJMData(jmdict)
 	fmt.Println("Done!")
+}
+
+// Return search results for query key
+func Query(key string) QueryResult {
+	db, err := bolt.Open("jdict.db", 0644, nil)
+	CheckErr(err)
+	defer db.Close()
+
+	result := QueryResult{}
+	result.Key = key
+
+	err = db.View(func(tx *bolt.Tx) error {
+		// Lookup index for entry collection
+
+		indexBucket := tx.Bucket(indexBucketName)
+		if indexBucket == nil {
+			return fmt.Errorf("Bucket %q not found!", indexBucketName)
+		}
+
+		entryId := indexBucket.Get([]byte(key))
+		fmt.Println(string(entryId))
+
+		// Retrieve collect data
+		entryBucket := tx.Bucket(entryBucketName)
+		if entryBucket == nil {
+			return fmt.Errorf("Bucket %q not found!", entryBucketName)
+		}
+		collectData := entryBucket.Get(entryId)
+		collect := EntryCollect{}
+		err = json.Unmarshal(json.RawMessage(collectData), &collect)
+		if err != nil {
+			return err
+		}
+
+		// Extract entry from combination code - array 3 numbers
+		entry := EntryResult{}
+		combineCode := collect.Keys[key]
+		if combineCode[0] < 0 {
+			// Query key in keb
+			k := Keb{}
+			k.Key = key
+			entry.Kanji = append(entry.Kanji, k)
+		} else {
+			entry.Kanji = collect.KanjiSet[combineCode[0]]
+		}
+
+		if combineCode[1] < 0 {
+			// Query key in reb
+			r := Reb{}
+			r.Key = key
+			entry.Reading = append(entry.Reading, r)
+		} else {
+			entry.Reading = collect.ReadingSet[combineCode[1]]
+		}
+
+		if combineCode[2] >= 0 {
+			// Sense
+			entry.Meaning = collect.SenseSet[combineCode[2]]
+		}
+
+		result.Entry = entry
+		fmt.Println(result)
+
+		return nil
+	})
+	CheckErr(err)
+
+	return result
+
 }
