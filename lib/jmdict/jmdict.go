@@ -68,17 +68,19 @@ type (
 		Info                []string  `xml:"s_info" json:",omitempty"`
 		Dialect             []string  `xml:"dial" json:",omitempty"`
 		// Source from a loan word
-		LSource []LangSource `xml:"lsource" json:",omitempty"`
-		Gloss   []string     `xml:"gloss" json:",omitempty"`
+		LSource     []LangSource `xml:"lsource" json:",omitempty"`
+		LSourceJson []string     `json:",omitempty"`
+		//LSource []string `xml:"lsource" json:",omitempty"`
+		Gloss []string `xml:"gloss" json:",omitempty"`
 	}
 	LangSource struct {
-		XMLName xml.Name `xml:"lsource"`
+		XMLName xml.Name `xml:"lsource" json:"-"`
 		// Part or full
-		Lang  string `xml:"lang,attr"`
-		Key   string `xml:",chardata"`
-		LType string `xml:"ls_type,attr"`
+		Lang  string `xml:"lang,attr" json:",omitempty"`
+		Key   string `xml:",chardata" json:",omitempty"`
+		LType string `xml:"ls_type,attr" json:"omitempty"`
 		// Construct from words not actual phrase
-		LWasei string `xml:"ls_wasei,attr"`
+		LWasei string `xml:"ls_wasei,attr" json:"omitempty"`
 	}
 )
 
@@ -222,8 +224,6 @@ func makeIndexes(entry JapEng) ([]string, EntryCollect) {
 		n := makeRNode(reb)
 		sSet := DFS(n, graph)
 		kSet := DFS(n, rGraph)
-		fmt.Println("------")
-		fmt.Println(reb.Reb)
 		indexes[n.id] = make([]int, 3)
 		indexes[n.id][1] = -1
 		for w, nodes := range kSet {
@@ -304,8 +304,17 @@ func makeEntryCollect(indexes map[string][]int, kanjiSet [][]Node,
 			el := Sense{data.Gloss, nil}
 			// Make meta mapping
 			data.Gloss = nil
-			metaRaw, _ := json.Marshal(data)
-			err := json.Unmarshal(json.RawMessage(metaRaw), &el.Meta)
+			// Additional action to flat LSource object
+			if len(data.LSource) > 0 {
+				for _, lang := range data.LSource {
+					langJson, _ := json.Marshal(lang)
+					data.LSourceJson = append(data.LSourceJson, string(langJson))
+				}
+				data.LSource = nil
+			}
+			metaRaw, err := json.Marshal(data)
+			CheckErr(err)
+			err = json.Unmarshal(json.RawMessage(metaRaw), &el.Meta)
 			CheckErr(err)
 			setDTO = append(setDTO, el)
 		}
@@ -364,26 +373,21 @@ func syncJMData(jmdict Jmdict) {
 
 	for _, entry := range jmdict.Entries {
 		//0. Indices query key
-		//Test entry
-		if entry.EntrySequence == 1000390 {
-			fmt.Println(entry)
-			queries, entry := makeIndexes(entry)
-			//1. Store data to 'entry' bucket
-			err = SaveEntry(&entry, db)
+		queries, entry := makeIndexes(entry)
+		//1. Store data to 'entry' bucket
+		err = SaveEntry(&entry, db)
+		CheckErr(err)
+		//2. Update 'index' bucket
+		for _, q := range queries {
+			err := db.Update(func(tx *bolt.Tx) error {
+				bucket, err := tx.CreateBucketIfNotExists([]byte("index"))
+				if err != nil {
+					return err
+				}
+				return bucket.Put([]byte(q), itob(entry.Id))
+			})
 			CheckErr(err)
-			//2. Update 'index' bucket
-			for _, q := range queries {
-				err := db.Update(func(tx *bolt.Tx) error {
-					bucket, err := tx.CreateBucketIfNotExists([]byte("index"))
-					if err != nil {
-						return err
-					}
-					return bucket.Put([]byte(q), itob(entry.Id))
-				})
-				CheckErr(err)
-			}
 		}
-
 	}
 
 }
