@@ -434,7 +434,7 @@ func Query(key string) QueryResult {
 			return err
 		}
 
-		// Extract entry from combination code - array 3 numbers
+		// Extract entry from combination code - [K - R - S] index
 		entry := EntryResult{}
 		combineCode := collect.Keys[key]
 		if combineCode[0] < 0 {
@@ -442,7 +442,7 @@ func Query(key string) QueryResult {
 			k := Keb{}
 			k.Key = key
 			entry.Kanji = append(entry.Kanji, k)
-		} else {
+		} else if len(collect.KanjiSet) > 0 {
 			entry.Kanji = collect.KanjiSet[combineCode[0]]
 		}
 
@@ -451,17 +451,16 @@ func Query(key string) QueryResult {
 			r := Reb{}
 			r.Key = key
 			entry.Reading = append(entry.Reading, r)
-		} else {
+		} else if len(collect.ReadingSet) > 0 {
 			entry.Reading = collect.ReadingSet[combineCode[1]]
 		}
 
-		if combineCode[2] >= 0 {
+		if combineCode[2] >= 0 && len(collect.SenseSet) > 0 {
 			// Sense
 			entry.Meaning = collect.SenseSet[combineCode[2]]
 		}
 
 		result.Entry = entry
-		fmt.Println(result)
 
 		return nil
 	})
