@@ -19,9 +19,13 @@ func main() {
 	if len(args) > 0 {
 		if args[0] == `populate` {
 			// Populate db
-			fmt.Println("Populate Database ...")
-			jmdict.PopulateData("data/sample.dict")
-			return
+			if len(args) > 1 {
+				fmt.Println("Populate Database ...")
+				//jmdict.PopulateData("data/sample.dict")
+				jmdict.PopulateData(args[1])
+				return
+
+			}
 		} else if args[0] == `search` {
 			// Query word
 			if len(args) > 1 {
@@ -32,5 +36,14 @@ func main() {
 		}
 	}
 	// Default helper
-	fmt.Println(`Usage: main [action] [options]`)
+	fmt.Println(`
+Usage: main [ACTION] [OPTIONS]
+
+Actions:
+  populate	Parse xml dictionary file & push to database
+			Option: xml file path
+  search	Query for key
+			Option: key string
+
+	`)
 }
