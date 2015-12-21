@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strconv"
 )
 
 var (
@@ -243,10 +242,8 @@ func makeIndexes(entry JapEng) ([]string, EntryCollect) {
 
 	// Make sense query mapping
 	for count, sense := range entry.Sense {
-		n := makeSNode(sense)
+		n := makeSNode(sense, count)
 		//TODO(hails) Unsafe method to id-predefined sense node. Better way?
-		count += 1
-		n.id = "Sense" + strconv.Itoa(count)
 		dSet := DFS(n, rGraph)
 		senseIndex := make([]int, 3)
 		senseIndex[2] = -1
