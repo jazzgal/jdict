@@ -420,7 +420,9 @@ func Query(key string) QueryResult {
 		}
 
 		entryId := indexBucket.Get([]byte(key))
-		fmt.Println(string(entryId))
+		if entryId == nil {
+			return nil
+		}
 
 		// Retrieve collect data
 		entryBucket := tx.Bucket(entryBucketName)
