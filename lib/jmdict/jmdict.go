@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 )
 
 var (
@@ -241,11 +242,17 @@ func makeIndexes(entry JapEng) ([]string, EntryCollect) {
 	}
 
 	// Make sense query mapping
-	for _, sense := range entry.Sense {
+	for count, sense := range entry.Sense {
 		n := makeSNode(sense)
+		//TODO(hails) Unsafe method to id-predefined sense node. Better way?
+		count += 1
+		n.id = "Sense" + strconv.Itoa(count)
 		dSet := DFS(n, rGraph)
+		senseIndex := make([]int, 3)
+		senseIndex[2] = -1
 		// Make kanji & reading combination set
 		for w, nodes := range dSet {
+
 			sort.Sort(XSortablePoints{nodes})
 			var updateSet *[][]Node
 			if w == 2 {
@@ -253,8 +260,14 @@ func makeIndexes(entry JapEng) ([]string, EntryCollect) {
 			} else {
 				updateSet = &kanjiSet
 			}
-			combineSet(nodes, updateSet)
+			idx := combineSet(nodes, updateSet)
 			//TODO(hails) Sense query
+			senseIndex[w-1] = idx
+		}
+
+		// Associate combination with all sense glosses
+		for _, gloss := range sense.Gloss {
+			indexes[gloss] = senseIndex
 		}
 	}
 
@@ -372,6 +385,7 @@ func syncJMData(jmdict Jmdict) {
 	CheckErr(err)
 
 	for _, entry := range jmdict.Entries {
+
 		//0. Indices query key
 		queries, entry := makeIndexes(entry)
 		//1. Store data to 'entry' bucket
@@ -467,7 +481,11 @@ func Query(key string) QueryResult {
 				entry.Reading = collect.ReadingSet[combineCode[1]]
 			}
 
-			if combineCode[2] >= 0 && len(collect.SenseSet) > 0 {
+			if combineCode[2] < 0 {
+				s := Sense{}
+				s.Gloss = append(s.Gloss, key)
+				entry.Meaning = []Sense{s}
+			} else if combineCode[2] >= 0 && len(collect.SenseSet) > 0 {
 				// Sense
 				entry.Meaning = collect.SenseSet[combineCode[2]]
 			}
