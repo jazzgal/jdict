@@ -117,8 +117,8 @@ type (
 // Search result classes
 type (
 	QueryResult struct {
-		Key   string
-		Entry EntryResult
+		Key     string
+		Entries []EntryResult
 	}
 	EntryResult struct {
 		Kanji   []Keb
@@ -241,11 +241,15 @@ func makeIndexes(entry JapEng) ([]string, EntryCollect) {
 	}
 
 	// Make sense query mapping
-	for _, sense := range entry.Sense {
-		n := makeSNode(sense)
+	for count, sense := range entry.Sense {
+		n := makeSNode(sense, count)
+		//TODO(hails) Unsafe method to id-predefined sense node. Better way?
 		dSet := DFS(n, rGraph)
+		senseIndex := make([]int, 3)
+		senseIndex[2] = -1
 		// Make kanji & reading combination set
 		for w, nodes := range dSet {
+
 			sort.Sort(XSortablePoints{nodes})
 			var updateSet *[][]Node
 			if w == 2 {
@@ -253,8 +257,14 @@ func makeIndexes(entry JapEng) ([]string, EntryCollect) {
 			} else {
 				updateSet = &kanjiSet
 			}
-			combineSet(nodes, updateSet)
+			idx := combineSet(nodes, updateSet)
 			//TODO(hails) Sense query
+			senseIndex[w-1] = idx
+		}
+
+		// Associate combination with all sense glosses
+		for _, gloss := range sense.Gloss {
+			indexes[gloss] = senseIndex
 		}
 	}
 
@@ -372,6 +382,7 @@ func syncJMData(jmdict Jmdict) {
 	CheckErr(err)
 
 	for _, entry := range jmdict.Entries {
+
 		//0. Indices query key
 		queries, entry := makeIndexes(entry)
 		//1. Store data to 'entry' bucket
@@ -384,7 +395,13 @@ func syncJMData(jmdict Jmdict) {
 				if err != nil {
 					return err
 				}
-				return bucket.Put([]byte(q), itob(entry.Id))
+				// Marshal entry ids into bytes.
+				buf, err := json.Marshal([]int{entry.Id})
+				if err != nil {
+					return err
+				}
+
+				return bucket.Put([]byte(q), buf)
 			})
 			CheckErr(err)
 		}
@@ -419,50 +436,59 @@ func Query(key string) QueryResult {
 			return fmt.Errorf("Bucket %q not found!", indexBucketName)
 		}
 
-		entryId := indexBucket.Get([]byte(key))
-		if entryId == nil {
+		entryIdsRaw := indexBucket.Get([]byte(key))
+		if entryIdsRaw == nil {
 			return nil
 		}
+		entryIds := []int{}
+		err := json.Unmarshal(json.RawMessage(entryIdsRaw), &entryIds)
 
 		// Retrieve collect data
 		entryBucket := tx.Bucket(entryBucketName)
 		if entryBucket == nil {
 			return fmt.Errorf("Bucket %q not found!", entryBucketName)
 		}
-		collectData := entryBucket.Get(entryId)
-		collect := EntryCollect{}
-		err = json.Unmarshal(json.RawMessage(collectData), &collect)
-		if err != nil {
-			return err
-		}
 
-		// Extract entry from combination code - [K - R - S] index
-		entry := EntryResult{}
-		combineCode := collect.Keys[key]
-		if combineCode[0] < 0 {
-			// Query key in keb
-			k := Keb{}
-			k.Key = key
-			entry.Kanji = append(entry.Kanji, k)
-		} else if len(collect.KanjiSet) > 0 {
-			entry.Kanji = collect.KanjiSet[combineCode[0]]
-		}
+		for _, entryId := range entryIds {
+			collectData := entryBucket.Get(itob(entryId))
+			collect := EntryCollect{}
+			err = json.Unmarshal(json.RawMessage(collectData), &collect)
+			if err != nil {
+				return err
+			}
 
-		if combineCode[1] < 0 {
-			// Query key in reb
-			r := Reb{}
-			r.Key = key
-			entry.Reading = append(entry.Reading, r)
-		} else if len(collect.ReadingSet) > 0 {
-			entry.Reading = collect.ReadingSet[combineCode[1]]
-		}
+			// Extract entry from combination code - [K - R - S] index
+			entry := EntryResult{}
+			combineCode := collect.Keys[key]
+			if combineCode[0] < 0 {
+				// Query key in keb
+				k := Keb{}
+				k.Key = key
+				entry.Kanji = append(entry.Kanji, k)
+			} else if len(collect.KanjiSet) > 0 {
+				entry.Kanji = collect.KanjiSet[combineCode[0]]
+			}
 
-		if combineCode[2] >= 0 && len(collect.SenseSet) > 0 {
-			// Sense
-			entry.Meaning = collect.SenseSet[combineCode[2]]
-		}
+			if combineCode[1] < 0 {
+				// Query key in reb
+				r := Reb{}
+				r.Key = key
+				entry.Reading = append(entry.Reading, r)
+			} else if len(collect.ReadingSet) > 0 {
+				entry.Reading = collect.ReadingSet[combineCode[1]]
+			}
 
-		result.Entry = entry
+			if combineCode[2] < 0 {
+				s := Sense{}
+				s.Gloss = append(s.Gloss, key)
+				entry.Meaning = []Sense{s}
+			} else if combineCode[2] >= 0 && len(collect.SenseSet) > 0 {
+				// Sense
+				entry.Meaning = collect.SenseSet[combineCode[2]]
+			}
+
+			result.Entries = append(result.Entries, entry)
+		}
 
 		return nil
 	})

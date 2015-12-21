@@ -1,6 +1,6 @@
 package jmdict
 
-import "time"
+import "strconv"
 
 // Graph struct
 type Node struct {
@@ -12,9 +12,11 @@ type Node struct {
 }
 
 // Constructor with default value
-func makeSNode(data interface{}) Node {
-	// Assign node id for tracking
-	id := time.Now().Format("20060102150405")
+func makeSNode(data interface{}, counter int) Node {
+	// Assign node id for tracking. Required format is 'Sense' + <int_counter>
+	id := "Sense"
+	counter += 1
+	id += strconv.Itoa(counter)
 	return Node{id, data, 3, false}
 }
 func makeKNode(data KanjiElement) Node {
@@ -59,8 +61,8 @@ func buildGraphs(entry JapEng) (map[string][]Node, map[string][]Node) {
 	// Sort out distinct edges & common edges. Direction S -> R -> K
 	// Make vertexes
 	var rEdges []Node
-	for _, s := range entry.Sense {
-		node := makeSNode(s)
+	for counter, s := range entry.Sense {
+		node := makeSNode(s, counter)
 		if len(s.RestrictedToKanji) > 0 {
 			// A special edge to K, mark it on node
 			node.mark = true
