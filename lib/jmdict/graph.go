@@ -1,6 +1,8 @@
 package jmdict
 
-import "time"
+import "strconv"
+
+var senseCount = 0
 
 // Graph struct
 type Node struct {
@@ -13,8 +15,10 @@ type Node struct {
 
 // Constructor with default value
 func makeSNode(data interface{}) Node {
-	// Assign node id for tracking
-	id := time.Now().Format("20060102150405")
+	// Assign node id for tracking. Required format is 'Sense' + <int_counter>
+	id := "Sense"
+	senseCount += 1
+	id += strconv.Itoa(senseCount)
 	return Node{id, data, 3, false}
 }
 func makeKNode(data KanjiElement) Node {
