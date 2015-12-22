@@ -390,18 +390,37 @@ func syncJMData(jmdict Jmdict) {
 		CheckErr(err)
 		//2. Update 'index' bucket
 		for _, q := range queries {
-			err := db.Update(func(tx *bolt.Tx) error {
-				bucket, err := tx.CreateBucketIfNotExists([]byte("index"))
-				if err != nil {
-					return err
+			// Retrieve old index if exist
+			entryIds := []int{}
+			err = db.View(func(tx *bolt.Tx) error {
+				indexBucket := tx.Bucket(indexBucketName)
+				if indexBucket == nil {
+					return fmt.Errorf("Bucket %q not found!", indexBucketName)
 				}
+
+				entryIdsRaw := indexBucket.Get([]byte(q))
+				if entryIdsRaw == nil {
+					return nil
+				}
+				return json.Unmarshal(json.RawMessage(entryIdsRaw), &entryIds)
+			})
+			CheckErr(err)
+
+			err := db.Update(func(tx *bolt.Tx) error {
+				indexBucket := tx.Bucket(indexBucketName)
+				if indexBucket == nil {
+					return fmt.Errorf("Bucket %q not found!", indexBucketName)
+				}
+
 				// Marshal entry ids into bytes.
-				buf, err := json.Marshal([]int{entry.Id})
+				entryIds = append(entryIds, entry.Id)
+
+				buf, err := json.Marshal(entryIds)
 				if err != nil {
 					return err
 				}
 
-				return bucket.Put([]byte(q), buf)
+				return indexBucket.Put([]byte(q), buf)
 			})
 			CheckErr(err)
 		}
