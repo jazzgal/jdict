@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"jdict/lib/jmdict"
+	"jdict/lib/kanji"
 	"os"
 )
 
@@ -33,7 +34,15 @@ func main() {
 				searchAndPrint(key)
 				return
 			}
+		} else if args[0] == `populate_kanji` {
+			// Query word
+			if len(args) > 1 {
+				fmt.Println("Populate Kanji Database ...")
+				kanji.PopulateData(args[1])
+				return
+			}
 		}
+
 	}
 	// Default helper
 	fmt.Println(`
