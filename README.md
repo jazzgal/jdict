@@ -4,22 +4,29 @@ Rich-features Japanese lookup service
 ## Features
 - Words look up by kanji, kana & meaning
 
+## Installation
+
+```sh
+$ go build main.go
+./main
+```
+
 ## Populate Data
 Data source could be obtained at http://www.edrdg.org/jmdict/j_jmdict.html
 
 ```sh
-$ go run main.go populate <data file path>
+$ ./main populate <data file path>
 # Examples:
-$ go run main.go populate data/sample.dict
+$ ./main populate data/sample.dict
 ```
 
 ## Query from command lines
 
 ```sh
-$ go run main.go query <key string>
+$ ./main query <key string>
 # Examples
 # Search for kanji
-$ go run main.go query "案件"
+$ ./main query "案件"
 {
   "Key": "案件",
   "Entries": [
@@ -57,10 +64,10 @@ $ go run main.go query "案件"
   ]
 }
 # Search for kana
-$ go run main.go query あんけん
+$ ./main query あんけん
 ...
 # Search for meaning
-$ go run main.go query subject
+$ ./main query subject
 
 ```
 
