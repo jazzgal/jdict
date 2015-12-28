@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+// Comment abcd
+
 // Search & print out result
 func searchAndPrint(key string) {
 	result := jmdict.Query(key)
